@@ -34,6 +34,7 @@ import pandas as pd
 class DataMonitor(tkinter.Frame):
     """
     """
+    setting_file = "data_monitor_setting.json"
 
     def __init__(self, master=None):
         super().__init__(master)
@@ -65,9 +66,9 @@ class DataMonitor(tkinter.Frame):
         self.observer = Observer()
 
         # 設定ファイル読み込み
-        setting_file = "data_monita_setting.json"
-        if os.path.exists(setting_file):
-            with open(setting_file, 'r') as fp:
+
+        if os.path.exists(self.setting_file):
+            with open(self.setting_file, 'r') as fp:
                 setting_data = json.load(fp)
                 self.file_path = setting_data["file_path"]
                 self.data_name = setting_data["data_name"]
@@ -76,19 +77,19 @@ class DataMonitor(tkinter.Frame):
                 self.open_file(self.file_path)
         else:
             self.file_path = ""
+            self.data_name = ""
+            self.data_setting = ""
 
         #
         self.master.protocol("WM_DELETE_WINDOW", self.delete_window)
 
     def delete_window(self):
         print("終了")
-        data = {
-            "file_path": self.file_path, "data_setting": self.data_setting}
-        data2 = {
-            "file_path": self.file_path, "data_name": list(self.data_name), "data_setting": self.data_setting}
-        print(data2)
-        with open('data_monita_setting.json', 'w') as fp:
-            json.dump(data2, fp, indent=4)
+        data_monitor_setting = {
+            "file_path": self.file_path, "data_name": self.data_name, "data_setting": self.data_setting}
+
+        with open(self.setting_file, 'w') as fp:
+            json.dump(data_monitor_setting, fp, indent=4)
 
         if self.observer.is_alive():
             self.observer.stop()
@@ -229,18 +230,19 @@ class DataMonitor(tkinter.Frame):
         # データ読み込み
         data = pd.read_csv(
             file_path, header=0, index_col=0)
-        data_name = data.columns.values
+        data_name = list(data.columns.values)
 
         if 'Time' not in data_name:
             return False
 
         self.data = data
 
-        if any(self.data_name != data_name):
+        if self.data_name != data_name:
+            self.data_name = data_name
             self.data_setting = {}
             for name in self.data_name:
                 self.data_setting[name] = dict(enable=False, test=100)
-            print(self.data_setting)
+
         return True
 
     def plot_data(self):
@@ -250,14 +252,7 @@ class DataMonitor(tkinter.Frame):
                 self.ax.plot(self.data['Time']/1e6,
                              self.data[name])
         self.ax.grid()
-        self.ax.set_ylabel("pitch")  # self.data_name[2]
         self.fig_canvas.draw()
-
-        # self.ax.cla()
-        # self.ax.plot(self.data['Time']/1e6, self.data["pitch"])
-        # self.ax.grid()
-        # self.ax.set_ylabel("pitch")  # self.data_name[2]
-        # self.fig_canvas.draw()
 
     def on_modified(self, event):
         file_path = event.src_path
