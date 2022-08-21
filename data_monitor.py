@@ -11,6 +11,7 @@
 画像として保存できる。
 画像保存時に文字や線をかえる。
 マウスで示した点のデータ値を表示する
+legendの表示
 """
 import tkinter
 from tkinter import ttk
@@ -107,9 +108,11 @@ class DataMonitor(tkinter.Frame):
         fig = Figure(figsize=(self.width/100, self.height/100))
 
         fig.canvas.mpl_connect('button_press_event', self.onclick)
+        fig.canvas.mpl_connect('motion_notify_event', self.mouse_move)
 
         # 座標軸の作成
         self.ax = fig.add_subplot(1, 1, 1)
+
         # matplotlibの描画領域とウィジェット(Frame)の関連付け
         self.fig_canvas = FigureCanvasTkAgg(fig, frame)
         # matplotlibのツールバーを作成
@@ -196,6 +199,15 @@ class DataMonitor(tkinter.Frame):
             print('xdata=%f, ydata=%f' % (
                 event.xdata, event.ydata))
 
+    def mouse_move(self, event):
+        if event.inaxes != self.ax:
+            self.ax_ln.set_linestyle('none')
+        else:
+            x, y = event.xdata, event.ydata
+            self.ax_ln.set_linestyle('solid')
+            self.ax_ln.set_xdata(x)
+        self.fig_canvas.draw()
+
     def open_file(self, file_path):
 
         # データ読み込み
@@ -250,8 +262,11 @@ class DataMonitor(tkinter.Frame):
         for name in self.data_name:
             if self.data_setting[name]['enable']:
                 self.ax.plot(self.data['Time']/1e6,
-                             self.data[name])
+                             self.data[name], label=name)
         self.ax.grid()
+        self.ax.legend()
+        xmin, xmax = self.ax.get_xlim()
+        self.ax_ln = self.ax.axvline(xmin)
         self.fig_canvas.draw()
 
     def on_modified(self, event):
