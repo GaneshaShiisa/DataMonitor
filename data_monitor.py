@@ -4,8 +4,8 @@
 再読み込みしても、見ている範囲は変えない
 〇ファイルを読み込める
 〇グラフが描画できる
-二段以上の表示が切り替えられる
-描画データの選択ができる
+〇二段以上の表示が切り替えられる
+〇描画データの選択ができる
 表示窓の時間的移動ができる
 表示窓の縦軸を変更できる
 画像として保存できる。
@@ -23,14 +23,14 @@ import hashlib
 from turtle import pos
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
-
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
 import json
-
 import numpy
 import pandas as pd
+
+import file_control
+import plot_control
 
 
 class DataMonitor(tkinter.Frame):
@@ -71,7 +71,7 @@ class DataMonitor(tkinter.Frame):
 
         root.geometry(geometry)
 
-        self.open_file(self.file_path)
+        file_control.open_file(self, self.file_path)
         #
         self.master.protocol("WM_DELETE_WINDOW", self.delete_window)
 
@@ -95,26 +95,17 @@ class DataMonitor(tkinter.Frame):
         """
         frame = tkinter.Frame(self)
 
-        # matplotlibの描画領域の作成
-        self.fig = Figure(figsize=(self.width/100, self.height/100))
-
-        # fig.canvas.mpl_connect('button_press_event', self.onclick)
-        # fig.canvas.mpl_connect('motion_notify_event', self.mouse_move)
-
-        # matplotlibの描画領域とウィジェット(Frame)の関連付け
-        self.fig_canvas = FigureCanvasTkAgg(self.fig, frame)
-        # matplotlibのグラフをフレームに配置
-        self.fig_canvas.get_tk_widget().pack(fill=tkinter.BOTH, expand=True)
+        plot_control.ini(self, frame)
 
         frame.pack()
 
     def onclick(self, event):
         print('button=%d, x=%d, y=%d' % (
             event.button, event.x, event.y))
-        print(event.inaxes == self.ax)
-        if event.inaxes != None:
-            print('xdata=%f, ydata=%f' % (
-                event.xdata, event.ydata))
+        # print(event.inaxes == self.ax)
+        # if event.inaxes != None:
+        #     print('xdata=%f, ydata=%f' % (
+        #         event.xdata, event.ydata))
 
     def mouse_move(self, event):
         if event.inaxes != self.ax:
@@ -125,76 +116,12 @@ class DataMonitor(tkinter.Frame):
             self.ax_ln.set_xdata(x)
         self.fig_canvas.draw()
 
-    def open_file(self, file_path):
-        # データ読み込み
-        if self.read_data(file_path):
-            # ファイル更新監視
-            event_handler = PatternMatchingEventHandler(
-                [os.path.basename(file_path)])
-            event_handler.on_modified = self.on_modified
-
-            if self.observer.is_alive():
-                self.observer.stop()
-                self.observer.join()
-
-            self.observer = Observer()
-            self.observer.schedule(event_handler, os.path.dirname(
-                file_path), recursive=True)
-            self.observer.start()
-
-            self._hash_cur = self._get_hash(file_path)
-
-            self.file_path = file_path
-
-            # データ描画
-            self.plot_data()
-
-    def read_data(self, file_path) -> bool:
-
-        # ファイルの存在確認
-        if os.path.exists(file_path) == False:
-            return False
-
-        # データ読み込み
-        data = pd.read_csv(
-            file_path, header=0, index_col=0)
-        data_name = list(data.columns.values)
-
-        if 'Time' not in data_name:
-            return False
-
-        self.data = data
-
-        if self.data_name != data_name:
-            self.data_name = data_name
-            self.data_setting = {}
-            for name in self.data_name:
-                self.data_setting[name] = dict(enable=False, position="1")
-
-        return True
-
     def on_modified(self, event):
-        file_path = event.src_path
-        file_name = os.path.basename(file_path)
-        time.sleep(0.1)
-
-        hash_new = self._get_hash(file_path)
-        hash_old = self._hash_cur
-        if hash_old != hash_new:
-            print(F'{file_path} changed')
-            self._hash_cur = hash_new
-            # データ読み込み
-            self.read_data(file_path)
-            # データ描画
-            self.plot_data()
-
-    def _get_hash(self, file_path: str) -> str:
-        with open(file_path, 'rb') as f:
-            return hashlib.md5(f.read()).hexdigest()
+        file_control.on_modified(self, event)
 
     def command_open_file(self):
         file_path = tkinter.filedialog.askopenfilename()
-        self.open_file(file_path)
+        file_control.open_file(self, file_path)
 
     def command_data_select(self):
         win = tkinter.Toplevel(self.master)
@@ -232,24 +159,7 @@ class DataMonitor(tkinter.Frame):
             self.data_setting[self.data_name[i]
                               ]['position'] = self.data_position[i].get()
         # データ描画
-        self.plot_data()
-
-    def plot_data(self):
-        self.fig.clear()
-        # 座標軸の作成
-        positions = []
-        for name in self.data_name:
-            positions.append(int(self.data_setting[name]["position"]))
-        subplot_num = max(positions)
-        for i in range(subplot_num):
-            ax = self.fig.add_subplot(subplot_num, 1, 1+i)
-            for name in self.data_name:
-                if self.data_setting[name]['enable'] and int(self.data_setting[name]['position']) == (i+1):
-                    ax.plot(self.data['Time']/1e6,
-                            self.data[name], label=name)
-            ax.grid()
-            ax.legend()
-        self.fig_canvas.draw()
+        plot_control.plot_data(self)
 
 
 class StatusBar(tkinter.Frame):
@@ -287,12 +197,6 @@ if __name__ == "__main__":
     root = tkinter.Tk()
     # Windowsサイズの設定
     root.title("Data Monitor")
-    # width = 1000
-    # height = 500
-    # screen_width = root.winfo_screenwidth()
-    # root.geometry(str(width)+"x"+str(height) +
-    #               "+"+str(screen_width-width-10)+"+0")
-    # master.resizable(0, 0)
 
     status_bar = StatusBar(master=root)
     status_bar.pack(side=tkinter.BOTTOM, fill=tkinter.X)
